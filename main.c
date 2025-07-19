@@ -50,15 +50,7 @@ int main(void) {
 
   // Setup bullets
   Entity bullets[MAX_BULLETS];
-  for (int i = 0; i < MAX_BULLETS; i++) {
-    Entity bullet = {
-      .kind = BULLET,
-      .pos = (Vector2){player.pos.x, player.pos.y},
-      .vel = (Vector2){1, 1},
-      .shape = (Rectangle){0, 0, 10, 10}
-    };
-    bullets[i] = bullet;
-  }
+  int bullet_count = 0;
 
   SetTargetFPS(60);
 
@@ -111,12 +103,19 @@ int main(void) {
     }
 
     // Update bullets
-      for (int i = 0; i < MAX_BULLETS; i++) {
-        if (IsKeyDown(KEY_SPACE)) {
-          bullets[i].vel = (Vector2){1, 1};
-      }
-        bullets[i].pos.y -= bullets[i].vel.y;
-        bullets[i].shape = (Rectangle){bullets[i].pos.x, bullets[i].pos.y, 10, 10};
+    if (IsKeyPressed(KEY_SPACE) && bullet_count < MAX_BULLETS) {
+      bullets[bullet_count] = (Entity) {
+        .kind = BULLET,
+        .pos = (Vector2){player.pos.x, player.pos.y},
+        .vel = (Vector2){0, -5},
+        .shape = (Rectangle){player.pos.x, player.pos.y, 10, 10}
+      };
+      bullet_count++;
+    }
+
+    for (int i = 0; i < bullet_count; i++) {
+      bullets[i].pos.y += bullets[i].vel.y;
+      bullets[i].shape.y = bullets[i].pos.y;
     }
 
     // --- Draw things
@@ -131,9 +130,7 @@ int main(void) {
 
     // Draw bullets
     for (int i = 0; i < MAX_BULLETS; i++) {
-      if (bullets[i].vel.y > 0) {
-        DrawRectangleRec(bullets[i].shape, BLUE);
-      }
+      DrawRectangleRec(bullets[i].shape, BLUE);
     }
 
     EndDrawing();
