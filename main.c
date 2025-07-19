@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 #define MAX_ALIENS 10
-#define MAX_BULLETS 50
+#define MAX_BULLETS 5 
 
 #define SCREEN_WIDTH 500
 #define SCREEN_HEIGHT 500
@@ -15,7 +15,6 @@ typedef enum {
   BULLET
 } Entity_kind;
 
-
 typedef struct {
   Entity_kind kind;
 
@@ -25,8 +24,10 @@ typedef struct {
   Rectangle shape;
 } Entity;
 
+void setup_entity(Entity);
+
 int main(void) {
-  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "test");
+  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Space Invaders");
 
   // Setup player
   Entity player = {
@@ -37,7 +38,10 @@ int main(void) {
   };
 
   // Setup aliens
-  Entity aliens[MAX_ALIENS];
+  Entity alive_aliens[MAX_ALIENS];
+  int alive_alien_count = 0;
+  Entity dead_aliens[256]; // Temporal hasta saber como reutilizar este array
+  int dead_alien_count = 0;
   for (int i = 0; i < MAX_ALIENS; i++) {
     Entity alien = {
       .kind = ALIEN,
@@ -45,12 +49,15 @@ int main(void) {
       .vel = (Vector2){1 + rand() % 10, rand() % 10},
       .shape = (Rectangle){i * 10, i * 10, 10, 10}
     };
-    aliens[i] = alien;
+    alive_aliens[alive_alien_count] = alien;
+    alive_alien_count++;
   }
 
   // Setup bullets
-  Entity bullets[MAX_BULLETS];
-  int bullet_count = 0;
+  Entity alive_bullets[MAX_BULLETS];
+  Entity dead_bullets[256]; // <-- Buscar manera de reutilizar este array, temporal el 256
+  int alive_bullet_count = 0;
+  int dead_bullet_count = 0;
 
   SetTargetFPS(60);
 
@@ -90,32 +97,67 @@ int main(void) {
     player.shape = (Rectangle){player.pos.x, player.pos.y, 50, 50};
 
     // Update aliens
-    for (int i = 0; i < MAX_ALIENS; i++) {
-      aliens[i].pos.x += aliens[i].vel.x;
+    for (int i = 0; i < alive_alien_count; i++) {
+      alive_aliens[i].pos.x += alive_aliens[i].vel.x;
 
-      if (aliens[i].pos.x < 0) {
-        aliens[i].pos.x = 0;
-        aliens[i].vel.x *= -1;
-      } else if (aliens[i].pos.x + aliens[i].shape.width > SCREEN_WIDTH) {
-        aliens[i].vel.x *= -1;
+      if (alive_aliens[i].pos.x < 0) {
+        alive_aliens[i].pos.x = 0;
+        alive_aliens[i].vel.x *= -1;
+      } else if (alive_aliens[i].pos.x + alive_aliens[i].shape.width > SCREEN_WIDTH) {
+        alive_aliens[i].vel.x *= -1;
       }
-      aliens[i].shape = (Rectangle){aliens[i].pos.x, aliens[i].pos.y, 10, 10};
+      alive_aliens[i].shape = (Rectangle){alive_aliens[i].pos.x, alive_aliens[i].pos.y, 10, 10};
     }
 
     // Update bullets
-    if (IsKeyPressed(KEY_SPACE) && bullet_count < MAX_BULLETS) {
-      bullets[bullet_count] = (Entity) {
+
+
+    // Create bullets
+    if (IsKeyPressed(KEY_SPACE) && alive_bullet_count < MAX_BULLETS) {
+      alive_bullets[alive_bullet_count] = (Entity) {
         .kind = BULLET,
         .pos = (Vector2){player.pos.x, player.pos.y},
         .vel = (Vector2){0, -5},
         .shape = (Rectangle){player.pos.x, player.pos.y, 10, 10}
       };
-      bullet_count++;
+      alive_bullet_count++;
     }
 
-    for (int i = 0; i < bullet_count; i++) {
-      bullets[i].pos.y += bullets[i].vel.y;
-      bullets[i].shape.y = bullets[i].pos.y;
+    // Update position of the bullets
+    for (int i = 0; i < alive_bullet_count; i++) {
+      alive_bullets[i].pos.y += alive_bullets[i].vel.y;
+      alive_bullets[i].shape.y = alive_bullets[i].pos.y;
+    }
+
+    // Check collision of the bullets with the aliens
+    for (int i = 0; i < alive_bullet_count; i++) {
+      for (int j = 0; j < alive_alien_count; j++) {
+        bool collision = CheckCollisionRecs(alive_bullets[i].shape, alive_aliens[j].shape);
+        if (collision) {
+            dead_aliens[dead_alien_count] = alive_aliens[j];
+            dead_alien_count++;
+
+            for (int k = j; k < alive_alien_count; k++) {
+                alive_aliens[k] = alive_aliens[k + 1];
+            }
+            alive_alien_count--;
+            j--;
+        }
+      }
+    }
+
+    // Eliminate bullets outside screen
+    for (int i = 0; i < alive_bullet_count; i++) {
+        if (alive_bullets[i].pos.y + alive_bullets[i].shape.height < 0) {
+            dead_bullets[dead_bullet_count] = alive_bullets[i];
+            dead_bullet_count++;
+            
+            for (int j = i; j < alive_bullet_count - 1; j++) {
+                alive_bullets[j] = alive_bullets[j + 1];
+            }
+            alive_bullet_count--;
+            i--;
+        }
     }
 
     // --- Draw things
@@ -124,13 +166,13 @@ int main(void) {
     DrawRectangleRec(player.shape, RED);
 
     // Draw aliens
-    for (int i = 0; i < MAX_ALIENS; i++) {
-      DrawRectangleRec(aliens[i].shape, GREEN);
+    for (int i = 0; i < alive_alien_count; i++) {
+      DrawRectangleRec(alive_aliens[i].shape, GREEN);
     }
 
     // Draw bullets
-    for (int i = 0; i < MAX_BULLETS; i++) {
-      DrawRectangleRec(bullets[i].shape, BLUE);
+    for (int i = 0; i < alive_bullet_count; i++) {
+      DrawRectangleRec(alive_bullets[i].shape, BLUE);
     }
 
     EndDrawing();
