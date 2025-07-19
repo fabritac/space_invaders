@@ -1,239 +1,143 @@
 #include "include/raylib.h"
-#include "include/raymath.h"
+
+#include <stdio.h>
 #include <stdlib.h>
 
-#define MAX_ENTITIES 20 
+#define MAX_ALIENS 10
+#define MAX_BULLETS 50
+
+#define SCREEN_WIDTH 500
+#define SCREEN_HEIGHT 500
 
 typedef enum {
-    PLAYER,
-    ALIEN
+  PLAYER,
+  ALIEN,
+  BULLET
 } Entity_kind;
 
+
 typedef struct {
-    int handle;
-    Entity_kind kind;
-    
-    void (*update_proc)(void*);
-    void (*draw_proc)(void*);
+  Entity_kind kind;
 
-    Vector2 pos;
-    Vector2 vel;
-    Vector2 acc;
+  Vector2 pos;
+  Vector2 vel;
 
-    bool do_physics;
-
-    Rectangle collision_shape;
-
-    float think_timer;
-    bool do_move;
+  Rectangle shape;
 } Entity;
 
-typedef struct {
-    int ticks;
-    float game_time_elapsed;
-    Entity entities[MAX_ENTITIES];
-    int entity_top_count;
-} Game_State;
+int main(void) {
+  InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "test");
 
-void entity_setup(Entity* entity, Entity_kind kind);
+  // Setup player
+  Entity player = {
+    .kind = PLAYER,
+    .pos = (Vector2){250, 250},
+    .vel = (Vector2){0, 0},
+    .shape = (Rectangle){250, 250, 50, 50}
+  };
 
-void setup_player(Entity* entity);
-void player_update(void* entity_ptr);
-void player_draw(void* entity_ptr);
+  // Setup aliens
+  Entity aliens[MAX_ALIENS];
+  for (int i = 0; i < MAX_ALIENS; i++) {
+    Entity alien = {
+      .kind = ALIEN,
+      .pos = (Vector2){i * 10, i * 10},
+      .vel = (Vector2){1 + rand() % 10, rand() % 10},
+      .shape = (Rectangle){i * 10, i * 10, 10, 10}
+    };
+    aliens[i] = alien;
+  }
 
-void setup_alien(Entity* entity);
-void alien_update(void* entity_ptr);
-void alien_draw(void* entity_ptr);
+  // Setup bullets
+  Entity bullets[MAX_BULLETS];
+  for (int i = 0; i < MAX_BULLETS; i++) {
+    Entity bullet = {
+      .kind = BULLET,
+      .pos = (Vector2){player.pos.x, player.pos.y},
+      .vel = (Vector2){1, 1},
+      .shape = (Rectangle){0, 0, 10, 10}
+    };
+    bullets[i] = bullet;
+  }
 
-void physics_system(Game_State* game_state, float delta_time);
-void constrain_entity_to_screen(Entity* entity, int screenWidth, int screenHeight);
+  SetTargetFPS(60);
 
-const int screenWidth = 450;
-const int screenHeight = 800;
+  while (!WindowShouldClose()) {
+    BeginDrawing();
 
-int main(void)
-{
-    InitWindow(screenWidth, screenHeight, "raylib [shapes] example - collision area");
+    ClearBackground(WHITE);
 
-    Game_State game_state = {60, 0, {0}}; 
+    // --- Update things
 
-    Entity player;
-    entity_setup(&player, PLAYER);
+    // Update player
 
-    game_state.entities[game_state.entity_top_count] = player;
-    game_state.entity_top_count++;
+    if(IsKeyDown(KEY_RIGHT)) player.vel.x += 1;
+    if(IsKeyDown(KEY_LEFT)) player.vel.x -= 1;
+    if(IsKeyDown(KEY_UP)) player.vel.y -= 1;
+    if(IsKeyDown(KEY_DOWN)) player.vel.y += 1;
 
+    player.pos.x += player.vel.x;
+    player.pos.y += player.vel.y;
 
-    for (int i = 0; i < MAX_ENTITIES - 1; i++) {
-        Entity alien;
-        entity_setup(&alien, ALIEN);
-        game_state.entities[game_state.entity_top_count] = alien;
-        game_state.entity_top_count++;
+    if (player.pos.x < 0) {
+      player.pos.x = 0;
+      player.vel.x = 0;
+    } else if (player.pos.x + player.shape.width > SCREEN_WIDTH) {
+      player.pos.x = SCREEN_WIDTH - player.shape.width;
+      player.vel.x = 0;
     }
 
-    SetTargetFPS(game_state.ticks); 
-
-    while (!WindowShouldClose()) 
-    {
-        
-        float delta_time = GetFrameTime();
-
-        //physics_system(&game_state, delta_time);
-
-        for (int i = 0; i < game_state.entity_top_count; i++) {
-            Entity* entity = &game_state.entities[i];
-            if (entity->update_proc != NULL) {
-                entity->update_proc(entity);
-            }
-        }
-        BeginDrawing();
-
-        ClearBackground(RAYWHITE);
-
-        for (int i = 0; i < game_state.entity_top_count; i++) {
-            Entity* entity = &game_state.entities[i];
-            if (entity->draw_proc != NULL) {
-                entity->draw_proc(entity);
-            }
-        }
-
-        EndDrawing();
+    if (player.pos.y < 0) {
+      player.pos.y = 0;
+      player.vel.y = 0;
+    } else if (player.pos.y + player.shape.height > SCREEN_HEIGHT) {
+      player.pos.y = SCREEN_HEIGHT - player.shape.height;
+      player.vel.y = 0;
     }
 
-    CloseWindow();
+    player.shape = (Rectangle){player.pos.x, player.pos.y, 50, 50};
 
-    return 0;
-}
+    // Update aliens
+    for (int i = 0; i < MAX_ALIENS; i++) {
+      aliens[i].pos.x += aliens[i].vel.x;
 
-
-void entity_setup(Entity* entity, Entity_kind kind) {
-    entity->handle = rand() % 1000;
-    entity->kind = kind;
-    entity->update_proc = NULL; 
-    entity->draw_proc = NULL; 
-    entity->do_physics = false; 
-    entity->pos = (Vector2){0, 0}; 
-    entity->vel = (Vector2){0, 0}; 
-    entity->acc = (Vector2){0, 0}; 
-    entity->collision_shape = (Rectangle){0, 0, 20, 20};
-
-    switch (kind) {
-        case PLAYER:
-            setup_player(entity);
-            break;
-        case ALIEN:
-            setup_alien(entity);
-            break;
-        default:
-            // Aca tendriamos que tirar algun error y crashear
-            break;
-    }
-}
-
-void setup_player(Entity* entity) {
-
-    entity->pos = (Vector2){200, 100};
-    entity->vel = (Vector2){10, 10};
-    entity->acc = (Vector2){0.5, 0.5};
-
-    entity->do_physics = true;
-
-    entity->update_proc = player_update;
-    entity->draw_proc = player_draw;
-}
-
-void player_update(void* entity_ptr) {
-    Entity* entity = (Entity*)entity_ptr;
-
-    if (IsKeyDown(KEY_RIGHT)) entity->pos.x += entity->vel.x;
-    if (IsKeyDown(KEY_LEFT)) entity->pos.x -= entity->vel.x;
-    if (IsKeyDown(KEY_UP)) entity->pos.y -= entity->vel.y;
-    if (IsKeyDown(KEY_DOWN)) entity->pos.y += entity->vel.y;
-
-    constrain_entity_to_screen(entity, screenWidth, screenHeight);
-
-    entity->collision_shape.x = entity->pos.x;
-    entity->collision_shape.y = entity->pos.y;
-}
-
-void player_draw(void* entity_ptr) {
-    Entity* entity = (Entity*)entity_ptr;
-    DrawRectangleRec(entity->collision_shape, BLUE);
-}
-
-
-void setup_alien(Entity* entity) {
-    entity->pos = (Vector2){100, 100};
-    entity->vel = (Vector2){1, 1};
-    entity->acc = (Vector2){0, 0};
-
-    entity->think_timer = 2.0f + (rand() % 3000) / 1000.0f;
-
-    entity->do_physics = true;
-    entity->update_proc = alien_update;
-    entity->draw_proc = alien_draw;
-}
-
-void alien_update(void* entity_ptr) {
-    Entity* entity = (Entity*)entity_ptr;
-
-    float dt = GetFrameTime();
-    entity->pos.x += entity->vel.x * dt;
-    entity->pos.y += entity->vel.y * dt;
-
-    constrain_entity_to_screen(entity, screenWidth, screenHeight);
-
-    // Alien movement
-    {
-    // Decrease timer
-    entity->think_timer -= GetFrameTime();
-
-    // If timer runs out, pick a new direction
-    if (entity->think_timer <= 0.0f) {
-        float speed = 50.0f;
-
-        // Random direction
-        int dx = (rand() % 3) - 1; // -1, 0, or 1
-        int dy = (rand() % 3) - 1;
-
-        entity->vel.x = dx * speed;
-        entity->vel.y = dy * speed;
-
-        // Reset timer (2–5 sec)
-        entity->think_timer = 2.0f + (rand() % 3000) / 1000.0f;
-    }
+      if (aliens[i].pos.x < 0) {
+        aliens[i].pos.x = 0;
+        aliens[i].vel.x *= -1;
+      } else if (aliens[i].pos.x + aliens[i].shape.width > SCREEN_WIDTH) {
+        aliens[i].vel.x *= -1;
+      }
+      aliens[i].shape = (Rectangle){aliens[i].pos.x, aliens[i].pos.y, 10, 10};
     }
 
-    entity->collision_shape.x = entity->pos.x;
-    entity->collision_shape.y = entity->pos.y;
-}
-
-void alien_draw(void* entity_ptr) {
-    Entity* entity = (Entity*)entity_ptr;
-    DrawRectangleRec(entity->collision_shape, GREEN);
-}
-
-void constrain_entity_to_screen(Entity* entity, int screenWidth, int screenHeight){
-    if (entity->pos.x < 0) {
-        entity->pos.x = 0;
-    } else if (entity->pos.x + entity->collision_shape.width > screenWidth) {
-        entity->pos.x = screenWidth - entity->collision_shape.width;
+    // Update bullets
+      for (int i = 0; i < MAX_BULLETS; i++) {
+        if (IsKeyDown(KEY_SPACE)) {
+          bullets[i].vel = (Vector2){1, 1};
+      }
+        bullets[i].pos.y -= bullets[i].vel.y;
+        bullets[i].shape = (Rectangle){bullets[i].pos.x, bullets[i].pos.y, 10, 10};
     }
 
-    if (entity->pos.y < 0) {
-        entity->pos.y = 0;
-    } else if (entity->pos.y + entity->collision_shape.height > screenHeight){
-        entity->pos.y = screenHeight - entity->collision_shape.height;
-    }
-}
+    // --- Draw things
 
-void physics_system(Game_State* game_state, float delta_time) {
-    for (int i = 0; i < game_state->entity_top_count; i++) {
-        if(game_state->entities[i].do_physics) {
-            Entity* e = &game_state->entities[i];
-            e->vel = Vector2Add(e->vel, Vector2Scale(e->acc, delta_time));
-            e->pos = Vector2Add(e->pos, Vector2Scale(e->vel, delta_time));
-            e->acc = (Vector2){0, 0};
-        }
+    // Draw player
+    DrawRectangleRec(player.shape, RED);
+
+    // Draw aliens
+    for (int i = 0; i < MAX_ALIENS; i++) {
+      DrawRectangleRec(aliens[i].shape, GREEN);
     }
+
+    // Draw bullets
+    for (int i = 0; i < MAX_BULLETS; i++) {
+      if (bullets[i].vel.y > 0) {
+        DrawRectangleRec(bullets[i].shape, BLUE);
+      }
+    }
+
+    EndDrawing();
+  }
+  CloseWindow();
+  return 0;
 }
